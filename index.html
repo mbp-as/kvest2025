@@ -5,55 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Годинник iPhone</title>
 <style>
-  body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background: #f0f0f0;
-    font-family: sans-serif;
-  }
-  .clock-picker {
-    display: flex;
-    gap: 20px;
-    background: white;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-  }
-  .wheel {
-    width: 60px;
-    height: 200px;
-    overflow: hidden;
-    border-radius: 10px;
-    border: 1px solid #ccc;
-    position: relative;
-    touch-action: none; /* Для мобільних свайпів */
-  }
-  .wheel ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    position: absolute;
-    top: 0;
-    width: 100%;
-    text-align: center;
-    transition: top 0.2s;
-  }
-  .wheel li {
-    height: 40px;
-    line-height: 40px;
-    font-size: 24px;
-  }
-  .indicator {
-    position: absolute;
-    top: 80px;
-    width: 100%;
-    height: 40px;
-    border-top: 2px solid #007aff;
-    border-bottom: 2px solid #007aff;
-    pointer-events: none;
-  }
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #f0f0f0;
+  font-family: sans-serif;
+}
+.clock-picker {
+  display: flex;
+  gap: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+}
+.wheel {
+  width: 60px;
+  height: 200px;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  position: relative;
+  touch-action: none;
+}
+.wheel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  text-align: center;
+}
+.wheel li {
+  height: 40px;
+  line-height: 40px;
+  font-size: 24px;
+}
+.indicator {
+  position: absolute;
+  top: 80px;
+  width: 100%;
+  height: 40px;
+  border-top: 2px solid #007aff;
+  border-bottom: 2px solid #007aff;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -72,67 +71,93 @@
 <script>
 function createWheel(element, count) {
   const ul = element.querySelector('ul');
+  const itemHeight = 40;
+  const totalHeight = itemHeight * count;
+
+  // створюємо список
   for (let i = 0; i < count; i++) {
     const li = document.createElement('li');
     li.textContent = i.toString().padStart(2,'0');
     ul.appendChild(li);
   }
-  for (let i = 0; i < count; i++) { // дублюємо для циклічності
+
+  // дублюємо список для безкінечності
+  for (let i = 0; i < count; i++) {
     const li = document.createElement('li');
     li.textContent = i.toString().padStart(2,'0');
     ul.appendChild(li);
   }
 
-  let top = 0;
-  const itemHeight = 40;
-  const totalHeight = itemHeight * count;
-  let isDragging = false;
+  let top = -totalHeight; // старт у середині, щоб була прокрутка в обидва боки
+  ul.style.top = top + 'px';
+
   let startY = 0;
   let startTop = 0;
+  let isDragging = false;
+  let velocity = 0;
+  let lastY = 0;
+  let lastTime = 0;
+  let animationFrame;
+
+  function animate() {
+    if (!isDragging) {
+      top += velocity;
+      velocity *= 0.95; // плавне гальмування
+
+      // циклічність
+      if (top > -itemHeight) top -= totalHeight;
+      if (top < -totalHeight*2 + itemHeight) top += totalHeight;
+
+      ul.style.top = top + 'px';
+      if (Math.abs(velocity) > 0.1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
+        // Прилипання до елемента
+        const index = Math.round(-top / itemHeight);
+        top = -index * itemHeight;
+        ul.style.transition = 'top 0.2s';
+        ul.style.top = top + 'px';
+        setTimeout(()=>ul.style.transition = '', 200);
+      }
+    }
+  }
+
+  function startDrag(y) {
+    isDragging = true;
+    startY = y;
+    startTop = top;
+    velocity = 0;
+    lastY = y;
+    lastTime = Date.now();
+    cancelAnimationFrame(animationFrame);
+  }
+
+  function moveDrag(y) {
+    const delta = y - startY;
+    top = startTop + delta;
+    ul.style.top = top + 'px';
+
+    // обчислення швидкості
+    const now = Date.now();
+    velocity = (y - lastY)/(now - lastTime)*16; // підганяємо до 60fps
+    lastY = y;
+    lastTime = now;
+  }
+
+  function endDrag() {
+    isDragging = false;
+    animate();
+  }
 
   // Мишка
-  element.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    startY = e.clientY;
-    startTop = top;
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const delta = e.clientY - startY;
-    top = startTop + delta;
-    if (top > 0) top -= totalHeight;
-    if (top < -totalHeight) top += totalHeight;
-    ul.style.top = top + 'px';
-  });
-  document.addEventListener('mouseup', () => {
-    if (!isDragging) return;
-    isDragging = false;
-    let index = Math.round(-top / itemHeight);
-    top = -index * itemHeight;
-    ul.style.top = top + 'px';
-  });
+  element.addEventListener('mousedown', e => startDrag(e.clientY));
+  document.addEventListener('mousemove', e => { if(isDragging) moveDrag(e.clientY) });
+  document.addEventListener('mouseup', endDrag);
 
-  // Свайпи для мобільних
-  element.addEventListener('touchstart', (e) => {
-    isDragging = true;
-    startY = e.touches[0].clientY;
-    startTop = top;
-  });
-  element.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    const delta = e.touches[0].clientY - startY;
-    top = startTop + delta;
-    if (top > 0) top -= totalHeight;
-    if (top < -totalHeight) top += totalHeight;
-    ul.style.top = top + 'px';
-  }, {passive: false});
-  element.addEventListener('touchend', () => {
-    if (!isDragging) return;
-    isDragging = false;
-    let index = Math.round(-top / itemHeight);
-    top = -index * itemHeight;
-    ul.style.top = top + 'px';
-  });
+  // Свайпи
+  element.addEventListener('touchstart', e => startDrag(e.touches[0].clientY));
+  element.addEventListener('touchmove', e => { e.preventDefault(); if(isDragging) moveDrag(e.touches[0].clientY) }, {passive:false});
+  element.addEventListener('touchend', endDrag);
 }
 
 createWheel(document.getElementById('hours'), 24);
